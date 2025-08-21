@@ -66,8 +66,13 @@ conda_prompt_info() {
     fi
 }
 
+# Define time display function
+time_prompt_info() {
+    echo "%F{247}[%D{%Y-%m-%d %H:%M:%S}]%f"
+}
+
 # Main prompt configuration
-PROMPT='$(conda_prompt_info)%F{51}%~%f$(git_prompt_info)
+PROMPT='$(conda_prompt_info)%F{51}%~%f$(git_prompt_info) $(time_prompt_info)
 %F{82}❯%f '
 
 # Disable right prompt
