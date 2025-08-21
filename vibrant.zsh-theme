@@ -10,6 +10,90 @@ setopt PROMPT_SUBST
 # Disable conda's default prompt modification, use custom one
 export CONDA_CHANGEPS1=false
 
+# Initialize path cache array (stores up to 10 recent paths)
+typeset -a VIBRANT_PATH_CACHE
+VIBRANT_PATH_CACHE=()
+
+# Function to add current directory to path cache
+add_to_path_cache() {
+    local current_dir="$PWD"
+    
+    # Remove current directory from cache if it already exists
+    VIBRANT_PATH_CACHE=(${VIBRANT_PATH_CACHE:#$current_dir})
+    
+    # Add current directory to the beginning of cache
+    VIBRANT_PATH_CACHE=("$current_dir" "${VIBRANT_PATH_CACHE[@]}")
+    
+    # Keep only the last 10 directories
+    if [[ ${#VIBRANT_PATH_CACHE[@]} -gt 10 ]]; then
+        VIBRANT_PATH_CACHE=("${VIBRANT_PATH_CACHE[@]:0:10}")
+    fi
+}
+
+# Enhanced cd function
+cd() {
+    local target_dir
+    
+    # Handle numeric arguments like cd -1, cd -2, etc.
+    if [[ $1 =~ ^-[0-9]+$ ]]; then
+        local index=${1#-}
+        if [[ $index -gt 0 && $index -le ${#VIBRANT_PATH_CACHE[@]} ]]; then
+            target_dir="${VIBRANT_PATH_CACHE[$index]}"
+            echo "Switching to: $target_dir"
+        else
+            echo "Error: Invalid index $1. Available range: -1 to -${#VIBRANT_PATH_CACHE[@]}"
+            return 1
+        fi
+    elif [[ $1 == "--list" || $1 == "-l" ]]; then
+        # List cached paths
+        echo "Recent paths:"
+        for i in {1..${#VIBRANT_PATH_CACHE[@]}}; do
+            echo "  -$i: ${VIBRANT_PATH_CACHE[$i]}"
+        done
+        return 0
+    else
+        target_dir="$1"
+    fi
+    
+    # Use builtin cd
+    builtin cd "$target_dir"
+    local cd_result=$?
+    
+    # Add to cache only if cd was successful
+    if [[ $cd_result -eq 0 ]]; then
+        add_to_path_cache
+    fi
+    
+    return $cd_result
+}
+
+# Auto-completion function for cd command
+_cd_path_cache() {
+    local context state line
+    local -a cached_paths
+    
+    # Generate completion options based on current input
+    if [[ $words[CURRENT] == -* ]]; then
+        # If user typed cd -, show numbered options
+        for i in {1..${#VIBRANT_PATH_CACHE[@]}}; do
+            cached_paths+=("-$i:${VIBRANT_PATH_CACHE[$i]}")
+        done
+        
+        _describe -t cached-paths 'Recent paths' cached_paths
+    else
+        # Default cd completion (directories)
+        _path_files -/
+    fi
+}
+
+# Register the completion function
+compdef _cd_path_cache cd
+
+# Enable menu selection for better navigation
+zstyle ':completion:*' menu select
+zstyle ':completion:*:cached-paths:*' format '%F{cyan}Recent paths:%f'
+zstyle ':completion:*:cached-paths:*' group-name cached-paths
+
 # Define Git status function
 git_prompt_info() {
     if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
